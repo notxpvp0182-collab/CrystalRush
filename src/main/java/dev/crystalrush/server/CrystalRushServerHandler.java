@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Authoritative server-side handler for optional CrystalRush verification packets.
- * Enforces rate limits, reach checks, inventory checks, and valid End Crystal placement rules.
+ * Enforces rate limits, reach checks, inventory checks, and valid End Crystal placement/detonation rules.
  */
 public final class CrystalRushServerHandler {
 
@@ -146,7 +146,7 @@ public final class CrystalRushServerHandler {
         double z = crystalSpace.getZ();
         List<Entity> blockingEntities = world.getOtherEntities(null, new Box(x, y, z, x + 1.0D, y + 2.0D, z + 1.0D));
         for (Entity entity : blockingEntities) {
-            if (entity instanceof EndCrystalEntity && entity.isAlive()) {
+            if (entity instanceof EndCrystalEntity crystal && crystal.isAlive() && !crystal.isRemoved()) {
                 return true;
             }
         }
@@ -160,14 +160,23 @@ public final class CrystalRushServerHandler {
             ServerPolicyConfig policy
     ) {
         Entity entity = world.getEntityById(entityId);
-        if (entity == null || !entity.isAlive()) {
+        if (entity == null || !entity.isAlive() || entity.isRemoved()) {
             return true;
         }
-        if (!(entity instanceof EndCrystalEntity)) {
+        if (!(entity instanceof EndCrystalEntity crystal)) {
+            return false;
+        }
+        // Reject crystals whose position is embedded inside Obsidian, Bedrock, or any solid block
+        BlockPos crystalPos = crystal.getBlockPos();
+        BlockState stateAtCrystal = world.getBlockState(crystalPos);
+        if (stateAtCrystal.isOf(Blocks.OBSIDIAN)
+                || stateAtCrystal.isOf(Blocks.BEDROCK)
+                || stateAtCrystal.isSolidBlock(world, crystalPos)) {
             return false;
         }
         double maxDistSq = policy.getMaxPlacementReachBlocks() * policy.getMaxPlacementReachBlocks();
-        return player.squaredDistanceTo(entity) <= maxDistSq;
+        return player.getEyePos().squaredDistanceTo(crystal.getBoundingBox().getCenter()) <= maxDistSq
+                && player.canSee(crystal);
     }
 
     private static void sendAck(ServerPlayerEntity player, int sequenceId, boolean confirmed, String reason) {
