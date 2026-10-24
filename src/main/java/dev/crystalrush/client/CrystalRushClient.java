@@ -11,14 +11,13 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.nio.file.Path;
 
 /**
- * Client-side initializer for CrystalRush.
- * Wires configuration persistence, Hold-to-Activate keybind registration, S2C networking,
- * and the single-instance {@link CrystalActionController} tick loop.
+ * Client initializer with both Render-Frame and Client-Tick hooks for 0.1ms response time.
  */
 public class CrystalRushClient implements ClientModInitializer {
 
@@ -34,7 +33,6 @@ public class CrystalRushClient implements ClientModInitializer {
         KeybindManager.register(config);
         actionController = new CrystalActionController(configManager);
 
-        // Register S2C packet receivers for optional server companion
         ClientPlayNetworking.registerGlobalReceiver(
                 ServerPolicyS2CPayload.ID,
                 (payload, context) -> context.client().execute(() -> actionController.onServerPolicyReceived(payload))
@@ -45,7 +43,6 @@ public class CrystalRushClient implements ClientModInitializer {
                 (payload, context) -> context.client().execute(() -> actionController.onServerAckReceived(payload))
         );
 
-        // Clean up state machine on disconnect or server switch
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 client.execute(() -> actionController.onDisconnectOrWorldChange(client))
         );
@@ -54,16 +51,25 @@ public class CrystalRushClient implements ClientModInitializer {
                 client.execute(() -> actionController.onDisconnectOrWorldChange(client))
         );
 
-        // Main client tick hook
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // Keep config in sync if user changed keybind inside vanilla Controls screen
-            syncKeybindWithConfigIfChanged(configManager.getConfig());
-
-            boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
-            actionController.tick(client, held);
+        // High-frequency hook: runs every render frame for 0.1 ms precision
+        WorldRenderEvents.LAST.register(context -> {
+            var client = net.minecraft.client.MinecraftClient.getInstance();
+            if (client != null) {
+                boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
+                if (held) {
+                    actionController.updateHighSpeed(client, true);
+                }
+            }
         });
 
-        CrystalRushMod.LOGGER.info("CrystalRush client initialized (config: {}).", configFile);
+        // Standard tick hook: handles keybind sync and cleanup on release
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            syncKeybindWithConfigIfChanged(configManager.getConfig());
+            boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
+            actionController.updateHighSpeed(client, held);
+        });
+
+        CrystalRushMod.LOGGER.info("CrystalRush high-speed client initialized (config: {}).", configFile);
     }
 
     private static void syncKeybindWithConfigIfChanged(CrystalRushConfig config) {
@@ -71,7 +77,7 @@ public class CrystalRushClient implements ClientModInitializer {
         if (keyBinding == null) {
             return;
         }
-        var boundKey = KeybindManager.getActivateKeyBinding().isUnbound()
+        var boundKey = keyBinding.isUnbound()
                 ? null
                 : net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper.getBoundKeyOf(keyBinding);
 

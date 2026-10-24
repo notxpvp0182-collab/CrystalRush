@@ -11,24 +11,18 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.screen.ScreenTexts;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.function.DoubleConsumer;
+
 /**
- * Clean, dark-themed configuration screen with restrained cyan accents for CrystalRush.
- * Built using standard Minecraft 1.21.11 GUI widgets and persisted immediately via {@link CrystalRushConfigManager}.
+ * Standard Default Minecraft Theme Configuration Screen for CrystalRush.
+ * Features wide 155px buttons so text never clips and non-linear sliders from 0.1 ms to 2.00 seconds.
  */
 public class CrystalRushConfigScreen extends Screen {
-
-    // Dark theme palette with restrained cyan accents (ARGB)
-    private static final int COLOR_BG_TOP = 0xEE0B1017;
-    private static final int COLOR_BG_BOTTOM = 0xF4101924;
-    private static final int COLOR_PANEL_FILL = 0xCC141E2B;
-    private static final int COLOR_CYAN_ACCENT = 0xFF00BCD4;
-    private static final int COLOR_CYAN_SUBTLE = 0x6600BCD4;
-    private static final int COLOR_TEXT_PRIMARY = 0xFFE6F4F8;
-    private static final int COLOR_TEXT_MUTED = 0xFF8CA8B5;
 
     private final Screen parent;
     private final CrystalRushConfigManager configManager;
@@ -50,12 +44,12 @@ public class CrystalRushConfigScreen extends Screen {
         this.clearChildren();
 
         int centerX = this.width / 2;
-        int colLeftX = centerX - 155;
-        int colRightX = centerX + 5;
-        int buttonWidth = 150;
+        int buttonWidth = 155;
         int buttonHeight = 20;
-        int startY = 58;
-        int rowSpacing = 26;
+        int colLeftX = centerX - buttonWidth - 5;
+        int colRightX = centerX + 5;
+        int startY = 42;
+        int rowSpacing = 25;
 
         // Row 1 Left: Master Enable/Disable
         this.addDrawableChild(ButtonWidget.builder(getEnabledText(), button -> {
@@ -64,60 +58,56 @@ public class CrystalRushConfigScreen extends Screen {
             persistChanges();
         }).dimensions(colLeftX, startY, buttonWidth, buttonHeight).build());
 
-        // Row 1 Right: Hold-to-Activate Keybind
+        // Row 1 Right: Activation Keybind
         this.keybindButton = ButtonWidget.builder(getKeybindText(), button -> {
             listeningForKey = !listeningForKey;
             button.setMessage(getKeybindText());
         }).dimensions(colRightX, startY, buttonWidth, buttonHeight).build();
         this.addDrawableChild(this.keybindButton);
 
-        // Row 2 Left: Automatic Crystal Slot Detection
+        // Row 2 Left: Auto Crystal Slot
         this.addDrawableChild(ButtonWidget.builder(getAutoSlotText(), button -> {
             workingConfig.setAutoCrystalSlotDetection(!workingConfig.isAutoCrystalSlotDetection());
             button.setMessage(getAutoSlotText());
             persistChanges();
         }).dimensions(colLeftX, startY + rowSpacing, buttonWidth, buttonHeight).build());
 
-        // Row 2 Right: Restore Previous Hotbar Slot
+        // Row 2 Right: Restore Old Slot
         this.addDrawableChild(ButtonWidget.builder(getRestoreSlotText(), button -> {
             workingConfig.setRestorePreviousHotbarSlot(!workingConfig.isRestorePreviousHotbarSlot());
             button.setMessage(getRestoreSlotText());
             persistChanges();
         }).dimensions(colRightX, startY + rowSpacing, buttonWidth, buttonHeight).build());
 
-        // Row 3 Left: Crystal Action Delay Slider (0..20 ticks)
-        this.addDrawableChild(new IntRangeSlider(
+        // Row 3 Left: Place Delay Slider (0.1 ms to 2000 ms / 2.0 s)
+        this.addDrawableChild(new MillisecondDelaySlider(
                 colLeftX,
                 startY + rowSpacing * 2,
                 buttonWidth,
                 buttonHeight,
-                "option.crystalrush.action_delay",
-                CrystalRushConfig.MIN_ACTION_DELAY_TICKS,
-                CrystalRushConfig.MAX_ACTION_DELAY_TICKS,
-                workingConfig.getCrystalActionDelayTicks(),
-                newValue -> {
-                    workingConfig.setCrystalActionDelayTicks(newValue);
+                "option.crystalrush.place_delay",
+                workingConfig.getPlaceDelayMs(),
+                newDelayMs -> {
+                    workingConfig.setPlaceDelayMs(newDelayMs);
                     persistChanges();
                 }
         ));
 
-        // Row 3 Right: Minimum Action Interval Slider (1..40 ticks)
-        this.addDrawableChild(new IntRangeSlider(
+        // Row 3 Right: Blast/Break Delay Slider (0.1 ms to 2000 ms / 2.0 s)
+        this.addDrawableChild(new MillisecondDelaySlider(
                 colRightX,
                 startY + rowSpacing * 2,
                 buttonWidth,
                 buttonHeight,
-                "option.crystalrush.action_interval",
-                CrystalRushConfig.MIN_ACTION_INTERVAL_TICKS,
-                CrystalRushConfig.MAX_ACTION_INTERVAL_TICKS,
-                workingConfig.getActionIntervalTicks(),
-                newValue -> {
-                    workingConfig.setActionIntervalTicks(newValue);
+                "option.crystalrush.break_delay",
+                workingConfig.getBreakDelayMs(),
+                newDelayMs -> {
+                    workingConfig.setBreakDelayMs(newDelayMs);
                     persistChanges();
                 }
         ));
 
-        // Row 4 Left: Display Status Messages
+        // Row 4 Left: Status Messages
         this.addDrawableChild(ButtonWidget.builder(getStatusMessagesText(), button -> {
             workingConfig.setDisplayStatusMessages(!workingConfig.isDisplayStatusMessages());
             button.setMessage(getStatusMessagesText());
@@ -131,11 +121,11 @@ public class CrystalRushConfigScreen extends Screen {
             persistChanges();
         }).dimensions(colRightX, startY + rowSpacing * 3, buttonWidth, buttonHeight).build());
 
-        // Bottom Buttons: Restore Defaults & Save/Close
-        int footerY = Math.min(this.height - 32, startY + rowSpacing * 4 + 24);
+        // Bottom Row: Reset to Defaults & Done (Standard Minecraft footer)
+        int footerY = Math.min(this.height - 28, startY + rowSpacing * 4 + 16);
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.translatable("option.crystalrush.reset_defaults").formatted(Formatting.GRAY),
+                Text.translatable("option.crystalrush.reset_defaults"),
                 button -> {
                     listeningForKey = false;
                     workingConfig.resetToDefaults();
@@ -145,7 +135,7 @@ public class CrystalRushConfigScreen extends Screen {
         ).dimensions(colLeftX, footerY, buttonWidth, buttonHeight).build());
 
         this.addDrawableChild(ButtonWidget.builder(
-                Text.translatable("option.crystalrush.done").formatted(Formatting.AQUA),
+                ScreenTexts.DONE,
                 button -> this.close()
         ).dimensions(colRightX, footerY, buttonWidth, buttonHeight).build());
     }
@@ -191,47 +181,9 @@ public class CrystalRushConfigScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Dark gradient backdrop
-        context.fillGradient(0, 0, this.width, this.height, COLOR_BG_TOP, COLOR_BG_BOTTOM);
-
-        // Central card panel with subtle cyan top & bottom borders
-        int panelLeft = (this.width / 2) - 168;
-        int panelRight = (this.width / 2) + 168;
-        int panelTop = 44;
-        int panelBottom = Math.min(this.height - 16, 212);
-
-        context.fill(panelLeft, panelTop, panelRight, panelBottom, COLOR_PANEL_FILL);
-        context.fill(panelLeft, panelTop, panelRight, panelTop + 2, COLOR_CYAN_ACCENT);
-        context.fill(panelLeft, panelBottom - 1, panelRight, panelBottom, COLOR_CYAN_SUBTLE);
-
-        // Header & Subtitle
-        context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                this.title,
-                this.width / 2,
-                16,
-                COLOR_CYAN_ACCENT
-        );
-        context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                Text.translatable("screen.crystalrush.config.subtitle"),
-                this.width / 2,
-                30,
-                COLOR_TEXT_PRIMARY
-        );
-
-        // Render interactive widgets
+        // Uses default Minecraft menu background & widget rendering
         super.render(context, mouseX, mouseY, delta);
-
-        // Informational notice regarding server authority
-        int noticeY = Math.min(this.height - 50, 166);
-        context.drawCenteredTextWithShadow(
-                this.textRenderer,
-                Text.translatable("screen.crystalrush.config.delay_notice"),
-                this.width / 2,
-                noticeY,
-                COLOR_TEXT_MUTED
-        );
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 18, 0xFFFFFF);
     }
 
     @Override
@@ -270,7 +222,7 @@ public class CrystalRushConfigScreen extends Screen {
 
     private Text getKeybindText() {
         if (listeningForKey) {
-            return Text.translatable("option.crystalrush.keybind.listening").formatted(Formatting.AQUA);
+            return Text.translatable("option.crystalrush.keybind.listening").formatted(Formatting.YELLOW);
         }
         String keyLabel;
         if (workingConfig.getActivationKeyCode() == GLFW.GLFW_KEY_UNKNOWN) {
@@ -283,67 +235,68 @@ public class CrystalRushConfigScreen extends Screen {
         }
         return Text.translatable("option.crystalrush.keybind")
                 .append(Text.literal(": "))
-                .append(Text.literal(keyLabel).formatted(Formatting.AQUA));
+                .append(Text.literal(keyLabel).formatted(Formatting.GREEN));
     }
 
     private static Text formatToggle(String translationKey, boolean state) {
         Text stateText = state
-                ? Text.literal("ON").formatted(Formatting.AQUA)
-                : Text.literal("OFF").formatted(Formatting.GRAY);
+                ? ScreenTexts.ON.copy().formatted(Formatting.GREEN)
+                : ScreenTexts.OFF.copy().formatted(Formatting.RED);
         return Text.translatable(translationKey).append(Text.literal(": ")).append(stateText);
     }
 
     /**
-     * Reusable integer range slider widget for tick settings.
+     * Smooth exponential slider allowing fine-grained control between 0.1 ms, 1 ms, 50 ms, and 2.00 seconds.
      */
-    private static class IntRangeSlider extends SliderWidget {
+    private static class MillisecondDelaySlider extends SliderWidget {
 
         private final String translationKey;
-        private final int min;
-        private final int max;
-        private final java.util.function.IntConsumer onValueChanged;
+        private final DoubleConsumer onValueChanged;
 
-        public IntRangeSlider(
+        public MillisecondDelaySlider(
                 int x,
                 int y,
                 int width,
                 int height,
                 String translationKey,
-                int min,
-                int max,
-                int currentValue,
-                java.util.function.IntConsumer onValueChanged
+                double currentDelayMs,
+                DoubleConsumer onValueChanged
         ) {
-            super(x, y, width, height, Text.empty(), toNormalized(currentValue, min, max));
+            super(x, y, width, height, Text.empty(), delayToNormalized(currentDelayMs));
             this.translationKey = translationKey;
-            this.min = min;
-            this.max = max;
             this.onValueChanged = onValueChanged;
             this.updateMessage();
         }
 
-        private static double toNormalized(int value, int min, int max) {
-            if (max <= min) {
-                return 0.0D;
-            }
-            int clamped = Math.max(min, Math.min(max, value));
-            return (double) (clamped - min) / (double) (max - min);
+        private static double delayToNormalized(double delayMs) {
+            double clamped = Math.max(CrystalRushConfig.MIN_DELAY_MS, Math.min(CrystalRushConfig.MAX_DELAY_MS, delayMs));
+            double ratio = (clamped - CrystalRushConfig.MIN_DELAY_MS)
+                    / (CrystalRushConfig.MAX_DELAY_MS - CrystalRushConfig.MIN_DELAY_MS);
+            return Math.pow(ratio, 1.0D / 3.0D);
         }
 
-        private int getDiscreteValue() {
-            return (int) Math.round(this.min + this.value * (this.max - this.min));
+        private double normalizedToDelayMs() {
+            double curved = Math.pow(this.value, 3.0D);
+            double rawMs = CrystalRushConfig.MIN_DELAY_MS
+                    + curved * (CrystalRushConfig.MAX_DELAY_MS - CrystalRushConfig.MIN_DELAY_MS);
+            if (rawMs < 10.0D) {
+                return Math.round(rawMs * 10.0D) / 10.0D; // 0.1 ms precision
+            } else {
+                return Math.round(rawMs); // 1 ms precision
+            }
         }
 
         @Override
         protected void updateMessage() {
-            int discrete = getDiscreteValue();
+            double ms = normalizedToDelayMs();
+            String formatted = CrystalRushConfig.formatDelayLabel(ms);
             this.setMessage(Text.translatable(this.translationKey,
-                    Text.literal(String.valueOf(discrete)).formatted(Formatting.AQUA)));
+                    Text.literal(formatted).formatted(Formatting.YELLOW)));
         }
 
         @Override
         protected void applyValue() {
-            this.onValueChanged.accept(getDiscreteValue());
+            this.onValueChanged.accept(normalizedToDelayMs());
         }
     }
 }
