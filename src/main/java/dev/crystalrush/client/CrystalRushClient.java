@@ -11,13 +11,14 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 
 import java.nio.file.Path;
 
 /**
- * Client initializer with both Render-Frame and Client-Tick hooks for 0.1ms response time.
+ * Client initializer with Render-Frame (HudRenderCallback) + Dual Client-Tick hooks for 0.1ms response time.
  */
 public class CrystalRushClient implements ClientModInitializer {
 
@@ -51,9 +52,9 @@ public class CrystalRushClient implements ClientModInitializer {
                 client.execute(() -> actionController.onDisconnectOrWorldChange(client))
         );
 
-        // High-frequency hook: runs every render frame for 0.1 ms precision
-        WorldRenderEvents.LAST.register(context -> {
-            var client = net.minecraft.client.MinecraftClient.getInstance();
+        // High-frequency render frame hook: runs every frame for 0.1 ms precision
+        HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
+            MinecraftClient client = MinecraftClient.getInstance();
             if (client != null) {
                 boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
                 if (held) {
@@ -62,7 +63,15 @@ public class CrystalRushClient implements ClientModInitializer {
             }
         });
 
-        // Standard tick hook: handles keybind sync and cleanup on release
+        // Start of client tick hook
+        ClientTickEvents.START_CLIENT_TICK.register(client -> {
+            boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
+            if (held) {
+                actionController.updateHighSpeed(client, true);
+            }
+        });
+
+        // End of client tick hook: handles keybind sync and cleanup on release
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             syncKeybindWithConfigIfChanged(configManager.getConfig());
             boolean held = KeybindManager.isActivationHeld(client, configManager.getConfig());
