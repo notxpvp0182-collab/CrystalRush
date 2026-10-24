@@ -34,7 +34,6 @@ public final class CrystalRushServerHandler {
     }
 
     public static void register(ServerPolicyConfig policy) {
-        // Send server policy when a player joins
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity player = handler.getPlayer();
             if (ServerPlayNetworking.canSend(player, ServerPolicyS2CPayload.ID)) {
@@ -51,7 +50,6 @@ public final class CrystalRushServerHandler {
             LAST_SEQUENCE_BY_PLAYER.remove(uuid);
         });
 
-        // Handle optional C2S verification requests
         ServerPlayNetworking.registerGlobalReceiver(
                 CrystalActionVerifyC2SPayload.ID,
                 (payload, context) -> {
@@ -71,13 +69,11 @@ public final class CrystalRushServerHandler {
     ) {
         UUID uuid = player.getUuid();
 
-        // 1. Check server policy
         if (!policy.isAllowCrystalRush()) {
             sendAck(player, payload.sequenceId(), false, "disabled_by_server");
             return;
         }
 
-        // 2. Reject duplicate or out-of-order sequence IDs
         Integer lastSeq = LAST_SEQUENCE_BY_PLAYER.get(uuid);
         if (lastSeq != null && payload.sequenceId() <= lastSeq) {
             sendAck(player, payload.sequenceId(), false, "duplicate_sequence");
@@ -85,14 +81,16 @@ public final class CrystalRushServerHandler {
         }
         LAST_SEQUENCE_BY_PLAYER.put(uuid, payload.sequenceId());
 
-        // 3. Verify player state
         if (!player.isAlive() || player.isSpectator()) {
             sendAck(player, payload.sequenceId(), false, "invalid_player_state");
             return;
         }
 
-        // 4. Enforce server-authoritative tick interval
-        ServerWorld world = player.getServerWorld();
+        if (!(player.getEntityWorld() instanceof ServerWorld world)) {
+            sendAck(player, payload.sequenceId(), false, "invalid_world");
+            return;
+        }
+
         long currentTick = world.getTime();
         Long lastTick = LAST_ACTION_TICK_BY_PLAYER.get(uuid);
         if (lastTick != null && (currentTick - lastTick) < policy.getMinimumServerActionIntervalTicks()) {
@@ -100,7 +98,6 @@ public final class CrystalRushServerHandler {
             return;
         }
 
-        // 5. Validate action type & world state
         if (payload.actionType() == CrystalActionVerifyC2SPayload.ACTION_PLACE_BASE) {
             boolean valid = validateCrystalPlacementOnServer(player, world, payload.targetPos(), policy);
             if (valid) {
@@ -118,16 +115,13 @@ public final class CrystalRushServerHandler {
         }
     }
 
-    /**
-     * Checks normal Minecraft End Crystal placement requirements on the authoritative server world.
-     */
     private static boolean validateCrystalPlacementOnServer(
             ServerPlayerEntity player,
             ServerWorld world,
             BlockPos basePos,
             ServerPolicyConfig policy
     ) {
-        if (basePos == null || !world.isChunkLoaded(basePos)) {
+        if (basePos == null || !world.isChunkLoaded(basePos.getX() >> 4, basePos.getZ() >> 4)) {
             return false;
         }
         double maxDistSq = policy.getMaxPlacementReachBlocks() * policy.getMaxPlacementReachBlocks();
@@ -151,7 +145,6 @@ public final class CrystalRushServerHandler {
         double y = crystalSpace.getY();
         double z = crystalSpace.getZ();
         List<Entity> blockingEntities = world.getOtherEntities(null, new Box(x, y, z, x + 1.0D, y + 2.0D, z + 1.0D));
-        // If an EndCrystalEntity already spawned here from the vanilla interaction packet, confirm!
         for (Entity entity : blockingEntities) {
             if (entity instanceof EndCrystalEntity && entity.isAlive()) {
                 return true;
@@ -168,14 +161,13 @@ public final class CrystalRushServerHandler {
     ) {
         Entity entity = world.getEntityById(entityId);
         if (entity == null || !entity.isAlive()) {
-            // Entity was already destroyed by the vanilla attack packet -> confirmed!
             return true;
         }
         if (!(entity instanceof EndCrystalEntity)) {
             return false;
         }
         double maxDistSq = policy.getMaxPlacementReachBlocks() * policy.getMaxPlacementReachBlocks();
-        return player.getEyePos().squaredDistanceTo(entity.getPos()) <= maxDistSq;
+        return player.squaredDistanceTo(entity) <= maxDistSq;
     }
 
     private static void sendAck(ServerPlayerEntity player, int sequenceId, boolean confirmed, String reason) {

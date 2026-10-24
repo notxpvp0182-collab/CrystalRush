@@ -2,7 +2,6 @@ package dev.crystalrush.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +51,7 @@ public class CrystalRushConfigManager {
                 loaded.validate();
                 this.config = loaded;
             }
-        } catch (IOException | JsonSyntaxException | RuntimeException ex) {
+        } catch (IOException | RuntimeException ex) {
             LOGGER.error("Failed to read configuration file at {}; backing up corrupt file and restoring defaults.", configPath, ex);
             backupCorruptConfig();
             this.config = new CrystalRushConfig();
@@ -82,7 +81,6 @@ public class CrystalRushConfigManager {
             }
             Files.move(tempFile, configPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException ex) {
-            // Fallback if ATOMIC_MOVE is unsupported on the target filesystem
             try (BufferedWriter writer = Files.newBufferedWriter(configPath, StandardCharsets.UTF_8)) {
                 GSON.toJson(this.config, writer);
             } catch (IOException innerEx) {
