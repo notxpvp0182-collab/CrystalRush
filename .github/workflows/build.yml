@@ -1,0 +1,37 @@
+name: Build CrystalRush JAR
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.12'
+
+      - name: Build Mod with Gradle
+        run: gradle clean build --no-daemon
+
+      - name: Upload Compiled Mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrystalRush-1.21.11-Mod-JAR
+          path: |
+            build/libs/*.jar
+            !build/libs/*-dev.jar
+            !build/libs/*-sources.jar

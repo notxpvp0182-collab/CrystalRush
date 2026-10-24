@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "crystalrush",
+  "version": "${version}",
+  "name": "CrystalRush",
+  "description": "Configurable, state-driven End Crystal combat utility with safe hotbar slot management, server-confirmed state transitions, and optional server policy integration.",
+  "authors": [
+    "CrystalRush Team"
+  ],
+  "contact": {
+    "homepage": "https://github.com/crystalrush/crystalrush",
+    "sources": "https://github.com/crystalrush/crystalrush",
+    "issues": "https://github.com/crystalrush/crystalrush/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/crystalrush/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.crystalrush.CrystalRushMod"
+    ],
+    "client": [
+      "dev.crystalrush.client.CrystalRushClient"
+    ],
+    "modmenu": [
+      "dev.crystalrush.client.gui.ModMenuIntegration"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": ">=17.0.0"
+  }
+}
